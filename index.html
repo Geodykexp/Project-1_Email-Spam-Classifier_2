@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email Spam Classifier (Naive Bayes)</title>
+    <style>
+        /* Minimal, clean light theme */
+        :root {
+            --text: #111827;         /* slate-900 */
+            --muted: #6b7280;        /* gray-500 */
+            --border: #e5e7eb;       /* gray-200 */
+            --input: #d1d5db;        /* gray-300 */
+            --primary: #0ea5b7;      /* cyan-600 */
+            --primary-soft: rgba(14,165,183,0.15);
+            --danger-bg: #fee2e2;    /* red-100 */
+            --danger-fg: #991b1b;    /* red-800 */
+            --success-bg: #dcfce7;   /* green-100 */
+            --success-fg: #065f46;   /* green-800 */
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            background: #ffffff; /* White background */
+            color: var(--text);
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial;
+        }
+
+        .page { max-width: 720px; margin: 40px auto; padding: 0 16px; }
+        .header { text-align: center; margin-bottom: 16px; }
+        .header h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.01em; }
+        .header p { margin: 0; color: var(--muted); font-size: 14px; }
+
+        .card { background: #fff; border: 1px solid var(--border); border-radius: 8px; }
+        .card-inner { padding: 16px; }
+
+        label { display: block; margin: 0 0 8px; color: var(--muted); }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--input);
+            border-radius: 6px;
+            outline: none;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        input[type="text"]::placeholder { color: #9ca3af; }
+        input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+
+        .actions { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
+        .btn { border: none; background: var(--primary); color: #fff; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn:disabled { opacity: .7; cursor: not-allowed; }
+
+        .spinner { width: 18px; height: 18px; border: 2px solid #e5e7eb; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #result { margin-top: 12px; }
+        .result-box { display: none; border: 1px solid var(--border); background: #f9fafb; border-radius: 6px; padding: 10px 12px; }
+        .result-box.visible { display: block; }
+        .badge { display: inline-block; font-weight: 700; padding: 2px 10px; border-radius: 999px; font-size: 12px; margin-right: 8px; }
+        .badge.spam { background: var(--danger-bg); color: var(--danger-fg); }
+        .badge.ham { background: var(--success-bg); color: var(--success-fg); }
+
+        footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="header">
+            <h1>Email Spam Classifier</h1>
+            <p>Enter email text below and get an instant prediction.</p>
+        </header>
+
+        <section class="card">
+            <div class="card-inner">
+                <form id="inputForm" action="/predict" method="post">
+                    <label for="text">Email text</label>
+                    <input type="text" id="text" name="text" placeholder="e.g., Congratulations! You have won..." />
+                    <div class="actions">
+                        <button class="btn" type="submit" id="submitBtn">Classify</button>
+                        <div id="loader" class="spinner" aria-label="Loading"></div>
+                    </div>
+                </form>
+
+                <div id="result">
+                    <div id="resultBox" class="result-box">
+                        <span id="resultBadge" class="badge">PREDICTION</span>
+                        <span id="resultText"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer>Naive Bayes model</footer>
+    </div>
+
+    <script>
+        const form = document.getElementById('inputForm');
+        const loader = document.getElementById('loader');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultBox = document.getElementById('resultBox');
+        const resultBadge = document.getElementById('resultBadge');
+        const resultText = document.getElementById('resultText');
+
+        function setResultUI(predText) {
+            const txt = String(predText || '').trim();
+            resultText.textContent = txt || 'No prediction returned';
+            const isSpam = /spam/i.test(txt);
+            resultBadge.className = 'badge ' + (isSpam ? 'spam' : 'ham');
+            resultBadge.textContent = isSpam ? 'SPAM' : 'NOT SPAM';
+            resultBox.classList.add('visible');
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            loader.style.display = 'inline-block';
+            submitBtn.disabled = true;
+            resultBox.classList.remove('visible');
+
+            try {
+                const formData = new FormData(form);
+                const response = await fetch('/predict', { method: 'POST', body: formData });
+                const contentType = response.headers.get('content-type') || '';
+                let data;
+                if (contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    try { data = JSON.parse(text); } catch (_) { data = { prediction: text }; }
+                }
+                setResultUI(data && (data.prediction ?? data.result ?? data.label));
+            } catch (error) {
+                console.error(error);
+                setResultUI('Error: could not classify');
+            } finally {
+                loader.style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
