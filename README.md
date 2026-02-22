@@ -15,7 +15,7 @@ This project includes:
 - `main.py` — FastAPI app serving two routes:
   - `GET /` returns the `index.html` frontend
   - `POST /predict` accepts text and responds with a spam/ham prediction
-- `index.html` ��� Minimal UI to submit an email text and display the predicted label.
+- `index.html` Minimal UI to submit an email text and display the predicted label.
 - `spam.csv` — Dataset used for training (SMS Spam Collection formatted with columns `v1` and `v2`).
 
 
